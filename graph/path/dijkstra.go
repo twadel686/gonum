@@ -20,7 +20,7 @@ import (
 //
 // The time complexity of DijkstraFrom is O(|E|.log|V|).
 func DijkstraFrom(u graph.Node, g traverse.Graph) Shortest {
-	return dijkstraFrom(u, nil, g)
+	return dijkstraFrom(u, nil, g, nil)
 }
 
 // DijkstraFromTo returns a shortest path from u to t in the graph g. The
@@ -37,17 +37,35 @@ func DijkstraFromTo(u, t graph.Node, g traverse.Graph) (path []graph.Node, weigh
 	if t == nil {
 		panic("dijkstra: nil target node")
 	}
-	return dijkstraFrom(u, t, g).To(t.ID())
+	return dijkstraFrom(u, t, g, nil).To(t.ID())
 }
 
-func dijkstraFrom(u, t graph.Node, g traverse.Graph) Shortest {
+// DijkstraFromWithStartingNode returns a shortest-path tree for a shortest path from u to all nodes in
+// the graph g, including the starting node u and its connections even if they are not in the original graph.
+// If the graph does not implement Weighted, UniformCost is used.
+// DijkstraFromWithStartingNode will panic if g has a u-reachable negative edge weight or if any of the
+// provided connections have negative weights.
+//
+// The time complexity of DijkstraFromWithStartingNode is O(|E|.log|V|).
+func DijkstraFromWithStartingNode(u graph.Node, g traverse.Graph, connections []graph.WeightedEdge) Shortest {
+	return dijkstraFrom(u, nil, g, connections)
+}
+
+func dijkstraFrom(u, t graph.Node, g traverse.Graph, connections []graph.WeightedEdge) Shortest {
 	var path Shortest
+
 	// Use the incremental version when a target is provided.
 	if h, ok := g.(graph.Graph); t == nil && ok {
+		// Get all nodes from the graph
+		nodes := graph.NodesOf(h.Nodes())
+
+		// Check if u exists in the graph using Node method
 		if h.Node(u.ID()) == nil {
-			return Shortest{from: u}
+			// If u doesn't exist in the graph, add it to our nodes list
+			nodes = append(nodes, u)
 		}
-		path = newShortestFrom(u, graph.NodesOf(h.Nodes()))
+
+		path = newShortestFrom(u, nodes)
 	} else {
 		if g.From(u.ID()) == graph.Empty {
 			return Shortest{from: u}
@@ -83,6 +101,8 @@ func dijkstraFrom(u, t graph.Node, g traverse.Graph) Shortest {
 		if t != nil && mnid == t.ID() {
 			break
 		}
+
+		// Process edges from the original graph
 		to := g.From(mnid)
 		for to.Next() {
 			v := to.Node()
@@ -102,6 +122,27 @@ func dijkstraFrom(u, t graph.Node, g traverse.Graph) Shortest {
 			if joint < path.dist[j] {
 				heap.Push(&Q, distanceNode{node: v, dist: joint})
 				path.set(j, joint, k)
+			}
+		}
+
+		// Process additional connections if provided
+		for _, edge := range connections {
+			if edge.From().ID() == mnid {
+				v := edge.To()
+				vid := v.ID()
+				j, ok := path.indexOf[vid]
+				if !ok {
+					j = path.add(v)
+				}
+				w := edge.Weight()
+				if w < 0 {
+					panic("dijkstra: negative edge weight in connections")
+				}
+				joint := path.dist[k] + w
+				if joint < path.dist[j] {
+					heap.Push(&Q, distanceNode{node: v, dist: joint})
+					path.set(j, joint, k)
+				}
 			}
 		}
 	}

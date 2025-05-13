@@ -42,7 +42,7 @@ func TestDijkstraFrom(t *testing.T) {
 				defer func() {
 					panicked = recover() != nil
 				}()
-				pt = dijkstraFrom(test.Query.From(), tg.t, tg.g)
+				pt = dijkstraFrom(test.Query.From(), tg.t, tg.g, nil)
 			}()
 			if panicked || test.HasNegativeWeight {
 				if !test.HasNegativeWeight {
